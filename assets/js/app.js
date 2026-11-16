@@ -105,7 +105,7 @@ function loginPage(err = '') {
       <li><i>3</i><div><b>Tu progreso en un calendario.</b> Porcentaje de aciertos y tiempo en cada intento, por subárea.</div></li></ul></div>
       <p class="small" style="opacity:.7;margin-top:30px">Herramienta independiente de estudio. No está afiliada a la SEP ni a la USICAMM.</p><div class="deco"></div><div class="deco2"></div></section>
     <section class="login-panel"><div class="login-card"><div class="card">
-      <h2 style="margin-top:0">Iniciar sesión</h2><p class="muted">Usa tu cuenta de Google. El acceso es solo por invitación del administrador.</p>
+      <h2 style="margin-top:0">Iniciar sesión</h2><p class="muted">Entra con tu cuenta de Google. Usa siempre la misma cuenta para conservar tu progreso.</p>
       ${err ? `<div class="notice bad small" style="margin:12px 0">${esc(err)}</div>` : ''}
       <button class="btn google lg" id="g" style="width:100%;justify-content:center;margin-top:12px">${GOOGLE_SVG}<span>Continuar con Google</span></button>
       <div class="divider"></div>

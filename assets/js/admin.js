@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { state } from './state.js';
 import { esc, fmtDate, fmtTime, toast, modal, confirmDialog, loadingHTML, errMsg, SUBAREAS, FORMATS, plainLetters, pct } from './ui.js';
 
-const TABS = [['resumen', 'Resumen'], ['usuarios', 'Usuarios'], ['correos', 'Correos autorizados'], ['reportes', 'Reportes de fallas'], ['errores', 'Errores técnicos'], ['contenido', 'Contenido']];
+const TABS = [['resumen', 'Resumen'], ['usuarios', 'Usuarios'], ['correos', 'Acceso'], ['reportes', 'Reportes de fallas'], ['errores', 'Errores técnicos'], ['contenido', 'Contenido']];
 const USTATUS = { pending: ['Pendiente', 'warn'], approved: ['Aprobado', 'ok'], blocked: ['Bloqueado', 'bad'] };
 const BSTATUS = { nuevo: 'warn', revisando: '', resuelto: 'ok', descartado: 'gray' };
 
@@ -33,7 +33,7 @@ async function overview(box) {
       ${Object.keys(SUBAREAS).map(k => { const n = o.bank?.[k] || 0; return `<div class="subarea-row"><span class="code">${k}</span><div><div class="name">${esc(SUBAREAS[k].name)}</div><div class="bar ${n >= 15 ? 'ok' : 'bad'}"><i style="width:${Math.min(100, pct(n, 60))}%"></i></div></div><span class="pct">${n}</span></div>`; }).join('')}
       ${o.bank_total === 0 ? '<div class="notice warn" style="margin-top:10px">El banco está vacío. Ve a <a href="#/admin/contenido">Contenido</a> e importa el archivo <b>contenido_simulador.json</b>.</div>' : ''}</div>
       <div class="card"><h3>Fichas de estudio</h3><p><b>${o.docs}</b> fichas cargadas.</p>
-      <h3 style="margin-top:16px">Cómo dar acceso</h3><ol class="small" style="padding-left:18px;line-height:1.7"><li>Agrega el correo de Gmail de la persona en <a href="#/admin/correos">Correos autorizados</a>; al entrar con Google quedará aprobada automáticamente.</li><li>Si alguien entra sin estar autorizado, aparecerá como <b>pendiente</b> en Usuarios para que lo apruebes o lo bloquees.</li><li>Cada cuenta funciona en un solo dispositivo a la vez; en Usuarios puedes ver cuántas veces cambió de equipo.</li></ol></div></div>`;
+      <h3 style="margin-top:16px">Cómo dar acceso</h3><ol class="small" style="padding-left:18px;line-height:1.7"><li>Con la <b>aprobación automática</b> activada (en <a href="#/admin/correos">Acceso</a>), basta con compartir el enlace: quien entre con su cuenta de Google queda aprobado.</li><li>Si la desactivas, solo entran directo los correos autorizados y los demás quedan <b>pendientes</b> en Usuarios.</li><li>Cada cuenta funciona en un solo dispositivo a la vez; en Usuarios puedes ver cuántas veces cambió de equipo.</li></ol></div></div>`;
 }
 
 async function users(box) {
@@ -75,8 +75,14 @@ async function users(box) {
 }
 
 async function allowed(box) {
-  const list = await api.admin.allowed();
-  box.innerHTML = `<div class="grid g2"><div class="card pad-lg"><h3>Autorizar un correo</h3>
+  const [list, cfg] = await Promise.all([api.admin.allowed(), api.admin.getSettings()]);
+  const auto = !!cfg?.auto_approve;
+  box.innerHTML = `<div class="card pad-lg" style="margin-bottom:16px"><div class="row between" style="align-items:flex-start;gap:16px">
+      <div><h3 style="margin-top:0">Aprobación automática</h3>
+      <p class="small muted" style="margin:4px 0 0">${auto ? '<b>Activada.</b> Cualquier persona a la que le compartas el enlace y entre con su cuenta de Google queda aprobada sola.' : '<b>Desactivada.</b> Solo entran directo los correos autorizados; los demás quedan pendientes hasta que los apruebes en Usuarios.'}</p>
+      <p class="small muted" style="margin:6px 0 0">Siempre puedes bloquear a alguien en Usuarios. Si el enlace circula de más, desactívala.</p></div>
+      <label class="check" style="flex:none;margin:0"><input type="checkbox" id="auto" ${auto ? 'checked' : ''}><div><b>${auto ? 'Activada' : 'Desactivada'}</b></div></label></div></div>
+    <div class="grid g2"><div class="card pad-lg"><h3>Autorizar un correo</h3>
     <p class="small muted">La persona debe entrar con <b>esa misma cuenta de Google</b>. Al hacerlo, su cuenta quedará aprobada automáticamente.</p>
     <label class="field"><span>Correo de Gmail</span><input type="email" id="em" placeholder="nombre@gmail.com"></label>
     <label class="field"><span>Nota (opcional)</span><input type="text" id="nt" placeholder="Por ejemplo: compañera de la normal"></label>
@@ -86,6 +92,12 @@ async function allowed(box) {
     ${list.length ? `<div class="table-wrap"><table class="t"><tr><th>Correo</th><th>Nota</th><th>Desde</th><th></th></tr>${list.map(a => `<tr><td>${esc(a.email)}</td><td class="small">${esc(a.note || '')}</td><td class="small">${fmtDate(a.created_at)}</td><td><button class="btn sm ghost" data-del="${esc(a.email)}">Quitar</button></td></tr>`).join('')}</table></div>` : '<div class="empty">Aún no has autorizado correos.</div>'}</div></div>`;
   const valid = s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
   const reload = () => adminView(box.parentElement, 'correos');
+  box.querySelector('#auto').onchange = async (e) => {
+    const on = e.target.checked;
+    if (!on && !await confirmDialog('Desactivar aprobación automática', 'Las personas nuevas quedarán pendientes hasta que las apruebes. Quienes ya tienen cuenta no se ven afectados.', 'Desactivar')) { e.target.checked = true; return; }
+    try { await api.admin.setAutoApprove(on); toast(on ? 'Aprobación automática activada.' : 'Aprobación automática desactivada.', 'ok'); reload(); }
+    catch (err) { e.target.checked = !on; toast(errMsg(err), 'bad'); }
+  };
   box.querySelector('#add').onclick = async () => {
     const em = box.querySelector('#em').value.trim();
     if (!valid(em)) { toast('Escribe un correo válido.', 'warn'); return; }

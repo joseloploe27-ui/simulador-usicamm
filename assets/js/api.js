@@ -92,6 +92,8 @@ const realApi = {
     importContent: (payload) => rpc('admin_import_content', { p: payload }),
     questions: () => q(client().from('questions').select('id,area,subarea,format,stem,options,answer,rationale,reference,docs,active').order('id')),
     setQuestionActive: (id, active) => q(client().from('questions').update({ active }).eq('id', id)),
+    getSettings: () => rpc('admin_get_settings'),
+    setAutoApprove: (on) => rpc('admin_set_auto_approve', { p_on: !!on }),
     sessionEvents: (uid) => q(client().from('session_events').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(20))
   }
 };
