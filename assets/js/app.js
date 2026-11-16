@@ -110,7 +110,7 @@ function loginPage(err = '') {
       <button class="btn google lg" id="g" style="width:100%;justify-content:center;margin-top:12px">${GOOGLE_SVG}<span>Continuar con Google</span></button>
       <div class="divider"></div>
       <p class="small muted">Tu cuenta funciona en <b>un solo dispositivo a la vez</b>: si inicias sesión en otro equipo, se cerrará en el anterior.</p></div>
-      <p class="small faint" style="text-align:center;margin-top:14px">Versión ${esc(CONFIG.version)}</p></div></section></div>`;
+      <p class="small faint" style="text-align:center;margin-top:14px">Versión ${esc(CONFIG.version)} · <a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a></p></div></section></div>`;
   document.getElementById('g').onclick = async (e) => {
     e.currentTarget.disabled = true;
     localStorage.removeItem(SID_KEY);
@@ -164,7 +164,7 @@ function shell() {
       <a class="userchip" href="#/perfil" title="Mi cuenta" style="text-decoration:none"><span class="avatar">${p.avatar_url ? `<img src="${esc(p.avatar_url)}" alt="" referrerpolicy="no-referrer">` : esc(initials(p.full_name, state.user.email))}</span><span class="nm">${esc(name.split(' ')[0])}</span></a>
     </div></header>
     <main class="main" id="view"></main>
-    <footer class="footer">${esc(CONFIG.appName)} · versión ${esc(CONFIG.version)} · Herramienta de estudio independiente; los reactivos son originales y no provienen del examen oficial.</footer>
+    <footer class="footer">${esc(CONFIG.appName)} · versión ${esc(CONFIG.version)} · Herramienta de estudio independiente; los reactivos son originales y no provienen del examen oficial. · <a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a></footer>
 `;
   document.getElementById('mb').onclick = () => document.getElementById('nav').classList.toggle('open');
   document.getElementById('bug').onclick = bugDialog;
