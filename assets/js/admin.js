@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { state } from './state.js';
 import { esc, fmtDate, fmtTime, toast, modal, confirmDialog, loadingHTML, errMsg, SUBAREAS, FORMATS, plainLetters, pct } from './ui.js';
 
-const TABS = [['resumen', 'Resumen'], ['usuarios', 'Usuarios'], ['correos', 'Acceso'], ['reportes', 'Reportes de fallas'], ['errores', 'Errores técnicos'], ['contenido', 'Contenido']];
+const TABS = [['resumen', 'Resumen'], ['usuarios', 'Usuarios'], ['correos', 'Acceso'], ['equipos', 'Equipos'], ['reportes', 'Reportes de fallas'], ['errores', 'Errores técnicos'], ['contenido', 'Contenido']];
 const USTATUS = { pending: ['Pendiente', 'warn'], approved: ['Aprobado', 'ok'], blocked: ['Bloqueado', 'bad'] };
 const BSTATUS = { nuevo: 'warn', revisando: '', resuelto: 'ok', descartado: 'gray' };
 
@@ -15,6 +15,7 @@ export async function adminView(root, tab = 'resumen') {
   try {
     if (tab === 'usuarios') await users(box);
     else if (tab === 'correos') await allowed(box);
+    else if (tab === 'equipos') await devices(box);
     else if (tab === 'reportes') await bugs(box);
     else if (tab === 'errores') await errors(box);
     else if (tab === 'contenido') await content(box);
@@ -29,6 +30,7 @@ async function overview(box) {
     <a class="card stat" href="#/admin/usuarios" style="text-decoration:none"><div class="label">Solicitudes pendientes</div><div class="value" style="color:${o.pending ? 'var(--warn)' : 'inherit'}">${o.pending}</div><div class="sub">Revisar y aprobar</div></a>
     <div class="card stat"><div class="label">Activos (7 días)</div><div class="value">${o.active_7d}</div><div class="sub">${o.attempts} intentos concluidos en total</div></div>
     <a class="card stat" href="#/admin/reportes" style="text-decoration:none"><div class="label">Reportes abiertos</div><div class="value" style="color:${o.bugs_open ? 'var(--bad)' : 'inherit'}">${o.bugs_open}</div><div class="sub">${o.errors_24h} errores técnicos en 24 h</div></a></div>
+    ${o.device_alerts ? `<div class="notice warn" style="margin-top:16px"><b>${o.device_alerts} ${o.device_alerts === 1 ? 'aviso' : 'avisos'} de cuentas en equipos ajenos.</b> Alguien intentó usar otra cuenta en un equipo ya registrado. <a href="#/admin/equipos">Revisar</a></div>` : ''}
     <div class="grid g2" style="margin-top:16px"><div class="card"><div class="card-head"><h3>Banco de reactivos activos</h3><b>${o.bank_total}</b></div>
       ${Object.keys(SUBAREAS).map(k => { const n = o.bank?.[k] || 0; return `<div class="subarea-row"><span class="code">${k}</span><div><div class="name">${esc(SUBAREAS[k].name)}</div><div class="bar ${n >= 15 ? 'ok' : 'bad'}"><i style="width:${Math.min(100, pct(n, 60))}%"></i></div></div><span class="pct">${n}</span></div>`; }).join('')}
       ${o.bank_total === 0 ? '<div class="notice warn" style="margin-top:10px">El banco está vacío. Ve a <a href="#/admin/contenido">Contenido</a> e importa el archivo <b>contenido_simulador.json</b>.</div>' : ''}</div>
@@ -46,7 +48,7 @@ async function users(box) {
         <td><span class="chip ${USTATUS[u.status][1]}">${USTATUS[u.status][0]}</span></td>
         <td class="small">${u.attempts} intentos<br>${Math.round(u.minutes_total || 0)} min de estudio<br><span class="faint">Última vez: ${u.last_seen ? fmtDate(u.last_seen, true) : '—'}</span></td>
         <td class="small">Mejor simulacro: <b>${u.best_sim != null ? Math.round(u.best_sim) + '%' : '—'}</b><br>Promedio: ${u.avg_score != null ? u.avg_score + '%' : '—'}</td>
-        <td class="small">${esc(u.device_label || '—')}<br><span class="${u.device_switches_30d > 6 ? 'chip warn' : 'faint'}">${u.device_switches_30d} inicios en 30 días</span></td>
+        <td class="small">${esc(u.device_label || '—')}<br><span class="${u.device_switches_30d > 6 ? 'chip warn' : 'faint'}">${u.device_switches_30d} inicios en 30 días</span>${u.device_alerts ? `<br><a class="chip bad" href="#/admin/equipos">${u.device_alerts} ${u.device_alerts === 1 ? 'aviso' : 'avisos'} de equipo</a>` : ''}</td>
         <td><div class="row" style="gap:6px;flex-wrap:wrap">${u.id === state.user.id ? '<span class="small faint">Tú</span>' : `
           ${u.status !== 'approved' ? `<button class="btn sm ok" data-a="approve" data-u="${u.id}">Aprobar</button>` : ''}
           ${u.status !== 'blocked' ? `<button class="btn sm danger" data-a="block" data-u="${u.id}">Bloquear</button>` : ''}
@@ -192,4 +194,38 @@ async function content(box) {
   };
   box.querySelector('#qs').onchange = list; box.querySelector('#qf').oninput = list;
   list();
+}
+
+async function devices(box) {
+  const list = await api.admin.devices();
+  const render = (f) => {
+    const sel = list.filter(c => f === 'all' || !c.resolved);
+    box.querySelector('#dl').innerHTML = sel.length ? sel.map(c => {
+      const who = esc(c.user_name || c.user_email || 'Usuario');
+      const owner = esc(c.owner_name || c.owner_email || 'otra cuenta');
+      const text = c.kind === 'bloqueado'
+        ? `<b>${who}</b> <span class="small muted">(${esc(c.user_email || '')})</span> intentó entrar en el equipo registrado de <b>${owner}</b> <span class="small muted">(${esc(c.owner_email || '')})</span>. Se le pidió cambiar a su cuenta registrada.`
+        : `<b>${who}</b> <span class="small muted">(${esc(c.user_email || '')})</span> entró desde otro navegador en una computadora que parece ser la de <b>${owner}</b> <span class="small muted">(${esc(c.owner_email || '')})</span>. Puede ser la misma persona con otra cuenta o una computadora compartida.`;
+      return `<div class="card" style="margin-bottom:12px"><div class="row between" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px"><div class="row" style="gap:6px;margin-bottom:6px"><span class="chip ${c.kind === 'bloqueado' ? 'bad' : 'warn'}">${c.kind === 'bloqueado' ? 'Cuenta en equipo ajeno' : 'Posible mismo equipo'}</span>${c.resolved ? `<span class="chip ${c.allowed ? 'ok' : 'gray'}">${c.allowed ? 'Permitido' : 'Revisado'}</span>` : ''}${c.user_status === 'blocked' ? '<span class="chip bad">Cuenta bloqueada</span>' : ''}</div>
+        <p style="margin:0">${text}</p><p class="small faint" style="margin:6px 0 0">${fmtDate(c.created_at, true)} · ${c.attempts} ${c.attempts == 1 ? 'vez' : 'veces'} · ${esc(c.device_label || '')}</p></div>
+        <div class="row" style="gap:6px;flex-wrap:wrap">${c.resolved ? '' : `${c.kind === 'bloqueado' ? `<button class="btn sm ok" data-a="permitir" data-c="${c.id}">Permitir en ese equipo</button>` : ''}<button class="btn sm" data-a="ignorar" data-c="${c.id}">Marcar como revisado</button>`}
+          ${c.user_status !== 'blocked' ? `<button class="btn sm danger" data-a="bloquear" data-c="${c.id}">Bloquear cuenta</button>` : ''}
+          ${c.kind === 'bloqueado' ? `<button class="btn sm ghost" data-a="liberar" data-c="${c.id}">Liberar equipo</button>` : ''}</div></div></div>`;
+    }).join('') : '<div class="card empty">Sin avisos en este filtro.</div>';
+    box.querySelectorAll('[data-a]').forEach(b => b.onclick = () => act(b.dataset.a, list.find(x => String(x.id) === b.dataset.c)));
+  };
+  const act = async (a, c) => {
+    try {
+      if (a === 'permitir') { await api.admin.deviceAction(c.id, 'permitir'); toast('La cuenta ya puede usarse en ese equipo.', 'ok'); }
+      else if (a === 'ignorar') { await api.admin.deviceAction(c.id, 'ignorar'); toast('Aviso marcado como revisado.', 'ok'); }
+      else if (a === 'bloquear') { if (!await confirmDialog('Bloquear cuenta', `${c.user_email || 'Esta cuenta'} ya no podrá entrar al simulador.`, 'Bloquear', 'danger')) return; await api.admin.setStatus(c.user_id, 'blocked'); await api.admin.deviceAction(c.id, 'ignorar'); toast('Cuenta bloqueada.', 'ok'); }
+      else if (a === 'liberar') { if (!await confirmDialog('Liberar equipo', 'El equipo quedará sin dueño: la próxima cuenta que entre en él quedará registrada como su cuenta. Úsalo si la persona cambió de cuenta principal.', 'Liberar', 'danger')) return; await api.admin.deviceAction(c.id, 'liberar'); toast('Equipo liberado.', 'ok'); }
+      adminView(box.parentElement, 'equipos');
+    } catch (e) { toast(errMsg(e), 'bad'); }
+  };
+  box.innerHTML = `<div class="notice info small" style="margin-bottom:12px">Cada computadora queda registrada con la primera cuenta que entra en ella. Si alguien intenta usar otra cuenta en ese equipo, se le pide cambiar a su cuenta registrada y aparece un aviso aquí. Si es una computadora compartida por dos personas reales, usa <b>Permitir en ese equipo</b>.</div>
+    <div class="tabs" id="dt"><button class="on" data-f="open">Pendientes (${list.filter(c => !c.resolved).length})</button><button data-f="all">Todos (${list.length})</button></div><div id="dl"></div>`;
+  box.querySelectorAll('#dt button').forEach(b => b.onclick = () => { box.querySelectorAll('#dt button').forEach(x => x.classList.remove('on')); b.classList.add('on'); render(b.dataset.f); });
+  render('open');
 }

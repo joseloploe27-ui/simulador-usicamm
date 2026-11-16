@@ -41,6 +41,7 @@ const realApi = {
   async revokeOtherSessions() { try { await client().auth.signOut({ scope: 'others' }); } catch (e) { /* opcional */ } },
   async getProfile(uid) { return q(client().from('profiles').select('*').eq('id', uid).maybeSingle()); },
   async updateProfile(uid, fields) { return q(client().from('profiles').update(fields).eq('id', uid).select().single()); },
+  checkDevice: (key, fp, fphw, label) => rpc('check_device', { p_key: key, p_fp: fp || null, p_fphw: fphw || null, p_label: label || null }),
   claimSession: (sid, device, ua) => rpc('claim_session', { p_session: sid, p_device: device, p_ua: ua }),
   sessionAlive: (sid) => rpc('session_alive', { p_session: sid }),
   claimAdmin: (code) => rpc('claim_admin', { p_code: code }),
@@ -92,6 +93,8 @@ const realApi = {
     importContent: (payload) => rpc('admin_import_content', { p: payload }),
     questions: () => q(client().from('questions').select('id,area,subarea,format,stem,options,answer,rationale,reference,docs,active').order('id')),
     setQuestionActive: (id, active) => q(client().from('questions').update({ active }).eq('id', id)),
+    devices: () => rpc('admin_devices'),
+    deviceAction: (id, action) => rpc('admin_device_action', { p_conflict: id, p_action: action }),
     getSettings: () => rpc('admin_get_settings'),
     setAutoApprove: (on) => rpc('admin_set_auto_approve', { p_on: !!on }),
     sessionEvents: (uid) => q(client().from('session_events').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(20))

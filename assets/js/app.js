@@ -6,6 +6,7 @@ import { esc, toast, modal, loadingHTML, errMsg, errCode, initials, deviceLabel,
 import { examLobby, practiceSetup, resultsView } from './exam.js';
 import { dashboard, studyList, studyDoc, stopStudyTimer, examGuide, calendarView, historyView, profileView } from './views.js';
 import { adminView } from './admin.js';
+import { deviceKey, fingerprints } from './device.js';
 
 const app = document.getElementById('app');
 const SID_KEY = 'simad_sid';
@@ -39,7 +40,7 @@ window.addEventListener('online', () => offlineBar(false));
 function guardApi(obj) {
   for (const k of Object.keys(obj)) {
     const f = obj[k];
-    if (typeof f === 'function' && !['getSession', 'onAuth', 'signInGoogle', 'signOut', 'revokeOtherSessions', 'subscribeDevice', 'logClientError', 'claimSession', 'sessionAlive'].includes(k)) {
+    if (typeof f === 'function' && !['getSession', 'onAuth', 'signInGoogle', 'signOut', 'revokeOtherSessions', 'subscribeDevice', 'logClientError', 'claimSession', 'sessionAlive', 'checkDevice'].includes(k)) {
       obj[k] = async (...args) => {
         try { return await f.apply(obj, args); }
         catch (e) {
@@ -137,6 +138,25 @@ function statusPage(kind) {
     try { const ok = await api.claimAdmin(code); if (ok) { toast('Rol de administrador activado.', 'ok'); boot(); } else { cl.disabled = false; toast('Código incorrecto.', 'bad'); } }
     catch (e) { cl.disabled = false; toast(errMsg(e), 'bad'); }
   };
+}
+
+function deviceConflictPage(hint) {
+  stopGuard();
+  app.innerHTML = `<div class="kick" style="max-width:600px"><div class="card" style="text-align:left">
+    <div class="brand-mark" style="background:var(--warn,#a86a00);color:#fff;margin-bottom:14px">!</div>
+    <h2 style="margin-top:0">Este equipo ya tiene una cuenta registrada</h2>
+    <p>En esta computadora se registró primero la cuenta <b>${esc(hint || 'de otra persona')}</b>. Para que cada persona use una sola cuenta, en este equipo solo puede entrar esa cuenta.</p>
+    <p>Cambia a <b>tu cuenta registrada</b> (la primera con la que entraste) para continuar con tu progreso.</p>
+    <div class="notice info small" style="margin:14px 0">Si compartes esta computadora con otra persona que también se prepara, pídele al administrador que autorice tu cuenta en este equipo.</div>
+    <div class="row wrap"><button class="btn primary" id="switch">Cambiar a mi cuenta registrada</button><button class="btn" id="out">Cerrar sesión</button></div></div></div>`;
+  document.getElementById('switch').onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    state.session = state.user = state.profile = null; state.sid = null;
+    localStorage.removeItem(SID_KEY);
+    try { await api.signOut('local'); } catch (er) { }
+    try { await api.signInGoogle(); } catch (er) { e.currentTarget.disabled = false; toast(errMsg(er), 'bad'); }
+  };
+  document.getElementById('out').onclick = logout;
 }
 
 async function logout() {
@@ -254,6 +274,16 @@ async function boot() {
   if (url.searchParams.has('code') || urlErr) history.replaceState(null, '', location.pathname + (location.hash && !location.hash.includes('error') ? location.hash : ''));
   if (!session) { loginPage(urlErr ? 'No se pudo iniciar sesión: ' + urlErr : ''); return; }
   state.session = session; state.user = session.user;
+
+  // Una cuenta por equipo: si el equipo pertenece a otra cuenta, se pide cambiar a la cuenta registrada
+  try {
+    const { fp, fpHw } = await fingerprints();
+    const dv = await api.checkDevice(deviceKey(), fp, fpHw, deviceLabel());
+    if (dv && dv.ok === false) { deviceConflictPage(dv.owner_hint); return; }
+  } catch (e) {
+    if (errCode(e) === 'NO_AUTH') { await api.signOut('local').catch(() => { }); loginPage('Tu sesión expiró. Inicia sesión de nuevo.'); return; }
+    reportClientError(e?.message || String(e), 'check_device', e?.stack);
+  }
 
   // Identificador de esta sesión en este dispositivo
   let sid = localStorage.getItem(SID_KEY);
